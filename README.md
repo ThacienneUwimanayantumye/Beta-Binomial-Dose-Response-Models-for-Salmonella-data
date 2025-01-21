@@ -6,11 +6,11 @@ This repository demonstrates the use of a hierarchical beta-binomial dose-respon
 The project employs Bayesian inference with OpenBUGS and R for parameter estimation, showcasing advanced data analysis and visualization techniques. It is designed for scientific reproducibility and can be used as a portfolio piece.
 
  ## Features
- \begin{itemize}
- \item \textbf{Hierarchical Model:} Incorporates hyperparameters for strain-specific dose-response variability.
- \item \textbf{Bayesian Inference:} Implements MCMC to estimate parameters using OpenBUGS.
- \item \textbf{Predictive Analysis:} Includes predictions for a new strain.
- \item \textbf{Visualization:} Generates detailed plots for MCMC convergence, contour analysis, histograms, and dose-response curves.
+
+-**Hierarchical Model:** Incorporates hyperparameters for strain-specific dose-response variability.
+-**Bayesian Inference:** Implements MCMC to estimate parameters using OpenBUGS.
+-**Predictive Analysis:** Includes predictions for a new strain.
+-**Visualization:** Generates detailed plots for MCMC convergence, contour analysis, histograms, and dose-response curves.
 
  ## Prerequisites
 
