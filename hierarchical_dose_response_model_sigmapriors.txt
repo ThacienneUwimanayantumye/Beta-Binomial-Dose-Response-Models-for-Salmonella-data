@@ -1,0 +1,53 @@
+
+model {
+  # Hyperpriors for global level parameters (w_0, z_0, tau_w, tau_z)
+  w_0 ~ dnorm(0, 0.1)           # Prior for global mean of w
+  z_0 ~ dnorm(0, 0.1)           # Prior for global mean of z
+  sigma_w ~ dnorm(0, 1)C(0,)         # Prior for standard deviation of w
+  sigma_z ~ dnorm(0, 1)C(0,)         # Prior for standard deviation of z
+  
+  tau_w <- pow(sigma_w, -2)      # Precision for strain-specific w
+  tau_z <- pow(sigma_z, -2)      # Precision for strain-specific z
+  # Transformations for alpha0 and beta0
+  u0 <- 1 / (1 + exp(-w_0))  #logit inverse
+  v0 <- exp(z_0)       
+    
+  alpha0 <- u0 * v0       # alpha[k] = u[k] * v[k]
+  beta0 <- (1 - u0) * v0  # beta[k] = (1 - u[k]) * v[k]
+  
+  # NEW STRAIN PREDICTION:
+
+  wnew ~  dnorm(w_0,tau_w)
+  znew ~  dnorm(z_0,tau_z)
+  unew <-  1 / (1 + exp(-wnew))
+  vnew <-  exp(znew)
+  alphanew <- unew * vnew
+  betanew <- (1 - unew) * vnew  
+
+  # Loop over strains
+  for (k in 1:K) {
+    # Strain-specific priors (w[k], z[k])
+    w[k] ~ dnorm(w_0, tau_w)  # Strain-specific logit(u) for strain k
+    z[k] ~ dnorm(z_0, tau_z)  # Strain-specific log(v) for strain k
+    
+    # Transformations for alpha and beta
+    u[k] <- 1 / (1 + exp(-w[k]))  # u[k] = exp(w[k]) / (1 + exp(w[k])) = logit inverse
+    v[k] <- exp(z[k])             # v[k] = exp(z[k])
+    
+    alpha[k] <- u[k] * v[k]       # alpha[k] = u[k] * v[k]
+    beta[k] <- (1 - u[k]) * v[k]  # beta[k] = (1 - u[k]) * v[k]
+  }
+
+  # Loop over observations (individual data points) nested within strains
+  for (i in 1:N_total) {#N_total is the total number of individual data points
+    # Define strain-specific probability for each observation
+    log_p_inf[i] <- loggam(alpha[strain[i]] + beta[strain[i]]) + loggam(beta[strain[i]] + d[i]) -
+                    loggam(beta[strain[i]]) - loggam(alpha[strain[i]] + beta[strain[i]] + d[i])
+    p_inf[i] <- 1 - exp(log_p_inf[i])  # Probability of infection for observation i
+    
+    # Likelihood function for binomial data (successes y[i] out of n[i] trials)
+    y[i] ~ dbin(p_inf[i], n[i])
+  }
+}
+
+

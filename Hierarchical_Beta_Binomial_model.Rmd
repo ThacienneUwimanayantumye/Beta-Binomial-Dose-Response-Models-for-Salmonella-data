@@ -1,0 +1,632 @@
+---
+title: "Hierarchical Beta Binomial dose-response model (strain specific)"
+author: "Thacienne Uwimanayantumye"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Clear the working space and loading libraries
+
+
+```{r,message=FALSE,warning=FALSE}
+rm(list=ls())
+library(R2OpenBUGS)  #Communicate to OpenBUGS
+library(ggplot2)     #plotting
+library(MASS)        #manage density
+library(tidyr)       #data manipulation
+library(grid)       # For using textGrob for title customization
+library(gridExtra)   # For arranging multiple plots
+library(coda)   # For handling MCMC results
+library(Hmisc) 
+
+
+```
+
+## Writing the model
+
+
+```{r}
+model_file <- "hierarchical_dose_response_model_sigmapriors.txt"
+writeLines("
+model {
+  # Hyperpriors for global level parameters (w_0, z_0, tau_w, tau_z)
+  w_0 ~ dnorm(0, 0.1)           # Prior for global mean of w
+  z_0 ~ dnorm(0, 0.1)           # Prior for global mean of z
+  sigma_w ~ dnorm(0, 1)C(0,)         # Prior for standard deviation of w
+  sigma_z ~ dnorm(0, 1)C(0,)         # Prior for standard deviation of z
+  
+  tau_w <- pow(sigma_w, -2)      # Precision for strain-specific w
+  tau_z <- pow(sigma_z, -2)      # Precision for strain-specific z
+  # Transformations for alpha0 and beta0
+  u0 <- 1 / (1 + exp(-w_0))  #logit inverse
+  v0 <- exp(z_0)       
+    
+  alpha0 <- u0 * v0       # alpha[k] = u[k] * v[k]
+  beta0 <- (1 - u0) * v0  # beta[k] = (1 - u[k]) * v[k]
+  
+  # NEW STRAIN PREDICTION:
+
+  wnew ~  dnorm(w_0,tau_w)
+  znew ~  dnorm(z_0,tau_z)
+  unew <-  1 / (1 + exp(-wnew))
+  vnew <-  exp(znew)
+  alphanew <- unew * vnew
+  betanew <- (1 - unew) * vnew  
+
+  # Loop over strains
+  for (k in 1:K) {
+    # Strain-specific priors (w[k], z[k])
+    w[k] ~ dnorm(w_0, tau_w)  # Strain-specific logit(u) for strain k
+    z[k] ~ dnorm(z_0, tau_z)  # Strain-specific log(v) for strain k
+    
+    # Transformations for alpha and beta
+    u[k] <- 1 / (1 + exp(-w[k]))  # u[k] = exp(w[k]) / (1 + exp(w[k])) = logit inverse
+    v[k] <- exp(z[k])             # v[k] = exp(z[k])
+    
+    alpha[k] <- u[k] * v[k]       # alpha[k] = u[k] * v[k]
+    beta[k] <- (1 - u[k]) * v[k]  # beta[k] = (1 - u[k]) * v[k]
+  }
+
+  # Loop over observations (individual data points) nested within strains
+  for (i in 1:N_total) {#N_total is the total number of individual data points
+    # Define strain-specific probability for each observation
+    log_p_inf[i] <- loggam(alpha[strain[i]] + beta[strain[i]]) + loggam(beta[strain[i]] + d[i]) -
+                    loggam(beta[strain[i]]) - loggam(alpha[strain[i]] + beta[strain[i]] + d[i])
+    p_inf[i] <- 1 - exp(log_p_inf[i])  # Probability of infection for observation i
+    
+    # Likelihood function for binomial data (successes y[i] out of n[i] trials)
+    y[i] ~ dbin(p_inf[i], n[i])
+  }
+}
+
+", con = model_file)
+
+```
+
+## Preparing the data, Initialize the parameters, and run the model
+
+
+```{r}
+# Organizing data
+
+Data = subset(read.csv("salmonella.csv",header = T),S=="Normal")
+
+d <-10^Data$log10dose                                   # Dose levels
+y <- Data$Y                                             # Number of cases
+n <- Data$N                                             # Number of all individual
+serovars = unique(Data$t)                               # Different health status in the data
+strain <- as.integer(factor(Data$t,levels = serovars,
+                           labels = 1:length(serovars))) #Serovars labels
+K <- length(unique(strain))
+
+# List for the model
+
+data <- list(
+  y = y,
+  d = d,
+  n = n,
+  strain = strain,
+  N_total = length(y),  # Total number of observations
+  K = K
+)
+
+# initial values
+
+inits_list <- function(){list(
+  w_0 = 0,
+  z_0 = 0,
+  alpha0 = 0,
+  beta0 = 0,
+  sigma_w = 1,
+  sigma_z = 1,
+  w = rep(0,K),
+  z = rep(0,K),
+  alpha = rep(0,K),
+  beta = rep(0,K),
+  wnew = 0,
+  znew = 0,
+  alphanew = 0,
+  betanew = 0
+)
+}
+
+# Parameters to monitor
+
+parameters <- c("w_0", "z_0", "sigma_w", "sigma_z", "w", "z","alpha0","beta0","alpha","beta","znew","wnew","alphanew","betanew")
+
+# Running the model using R2OpenBUGS
+
+set.seed(123)
+
+results <- bugs(data = data,
+                inits = inits_list,
+                parameters.to.save = parameters,
+                model.file = model_file,
+                n.chains = 3,
+                n.iter = 10000,
+                n.burnin = 1000,
+                n.thin = 2,
+                DIC = TRUE,
+                debug = TRUE)
+
+Table <- signif(results$summary,2)   #table of summary statistics
+
+print(Table)
+
+#latex(Table, rowlabel = "X", collabel =  "Y", file = "") (convert the table to latex version for further reporting purposes if you need it)
+
+```
+# Checking for MCMC convergence
+
+
+```{r,fig.height=11,fig.width=11}
+
+# Define the parameters to plot
+params_to_plot <- c("w_0", "z_0", "sigma_w", "sigma_z", "w", "z")
+
+# Extract the MCMC samples from the results
+posterior_samples <- results$sims.list
+w0_posterior = posterior_samples$w_0
+z0_posterior = posterior_samples$z_0
+sigma_w_posterior = posterior_samples$sigma_w
+sigma_z_posterior = posterior_samples$sigma_z
+w_posterior = posterior_samples$w
+z_posterior = posterior_samples$z
+
+# Combine all relevant posterior samples into a list for easier processing
+trace_data <- list(
+  w_0 = w0_posterior,
+  z_0 = z0_posterior,
+  sigma_w = sigma_w_posterior,
+  sigma_z = sigma_z_posterior,
+  w = w_posterior,
+  z = z_posterior
+)
+
+# Create a long format data frame for plotting
+trace_data_long <- do.call(rbind, lapply(names(trace_data), function(param) {
+  samples <- trace_data[[param]]
+  
+  if (is.matrix(samples)) {
+    num_chains <- 3
+    num_iterations <- nrow(samples) / num_chains
+    
+    # Check if the number of iterations is an integer
+    if (num_iterations %% 1 != 0) stop("Number of iterations is not an integer.")
+    
+    # Create a long format data frame for matrix parameters
+    samples_long <- as.data.frame(samples)
+    colnames(samples_long) <- paste0(param, "_", seq_len(ncol(samples_long)))
+    samples_long <- pivot_longer(samples_long, cols = everything(), names_to = "parameter", values_to = "value")
+    
+    # Add chain and iteration info
+    samples_long$chain <- rep(1:num_chains, each = num_iterations * ncol(samples))
+    samples_long$iteration <- rep(1:num_iterations, num_chains * ncol(samples))
+    
+  } else if (is.vector(samples)) {
+    num_chains <- 3
+    num_iterations <- length(samples) / num_chains
+    
+    # Check if the number of iterations is an integer
+    if (num_iterations %% 1 != 0) stop("Number of iterations is not an integer.")
+    
+    # Create a data frame for scalar parameters
+    samples_long <- data.frame(
+      parameter = param,
+      value = samples,
+      chain = rep(1:num_chains, each = num_iterations),
+      iteration = rep(1:num_iterations, num_chains)
+    )
+  }
+  
+  return(samples_long)
+}))
+
+# Plot the trace plots with different colors for each chain
+ggplot(trace_data_long, aes(x = iteration, y = value, color = factor(chain))) +
+  geom_line(alpha = 0.7) +
+  facet_wrap(~ parameter, scales = "free_y", ncol = 2) +  # Facet by parameter
+  labs(title = "Trace Plots for Posterior Samples (by Chain)", 
+       x = "Iteration", y = "Parameter Value", color = "Chain") +
+  theme_minimal()
+ggsave("HBB_trace.pdf")
+
+```
+
+
+
+## Analayse and interpret the results
+
+### Contour plot of log10(alpha) and log10(beta) parameters
+
+```{r,fig.height=11,fig.width=10,warning=FALSE}
+
+# Generate log10 dose levels from 0 to the maximum of the observed doses
+max_dose <- max(data$d)
+log10_dose <- seq(0, log10(max_dose), length.out = 100)
+dose_levels <- 10^log10_dose  # Transform back to dose levels
+
+#Extract alpha0 and beta_0
+a_0 <- results$sims.list$alpha0
+b_0 <- results$sims.list$beta0
+
+
+# calculate alpha and beta for the four strains
+b <- results$sims.list$beta
+a <-  results$sims.list$alpha
+
+#Extract alphanew and betanew
+
+a_new <- results$sims.list$alphanew
+b_new <- results$sims.list$betanew
+
+alpha_matrix <- cbind(log10(as.matrix(a_0)), log10(a),log10(a_new))  # Matrix of dimensions (24000, 6)
+beta_matrix <-  cbind(log10(as.matrix(b_0)),log10(b),log10(b_new))    # Matrix of dimensions (24000, 6)
+
+# Number of strains
+K <- ncol(alpha_matrix)
+
+# Function to create contour plot for a given strain
+create_contour_plot <- function(alpha, beta, strain_id) {
+  # Perform kernel density estimation
+  density_est <- kde2d(alpha, beta, n = 100)
+  
+  # Convert the density estimates to a data frame for ggplot
+  density_df <- with(density_est, expand.grid(x = x, y = y))
+  density_df$z <- as.vector(density_est$z)
+  
+  # Create the plot
+  ggplot(data = density_df, aes(x = x, y = y, z = z)) +
+    geom_contour_filled(aes(fill = after_stat(level))) +
+    labs(title = paste(strain_id),
+         x = expression(log10(alpha)),
+         y = expression(log10(beta)),
+         fill = "Density") +
+    theme_minimal()
+}
+# create contour for the alpha0 and beta0
+
+#plot1 <- create_contour_plot(a_0, b_0, "New_strain")
+
+# Create a list to hold the plots
+plot_list <- vector("list", K)
+## Generate contour plots for each strain
+serovars_new <- c(c("Overall_strain"),serovars,c("New_strain"))
+for (k in 1:K) {
+  alpha_k <- alpha_matrix[, k]
+  beta_k <- beta_matrix[, k]
+  plot_list[[k]] <- create_contour_plot(alpha_k, beta_k, serovars_new[k])
+}
+
+# Convert ggplot objects to grobs (graphical objects)
+plot_grobs <- lapply(plot_list, ggplotGrob)
+
+# Define a custom main title as a grob
+main_title <- textGrob(
+  "Contour plot of log10(alpha) vs log10(beta)", 
+  gp = gpar(fontsize = 16, fontface = "bold")  # Increase font size and make it bold
+)
+
+# Arrange and display all the plots in a grid with the custom main title
+p=grid.arrange(grobs = plot_grobs, ncol = 2, top = main_title)  # Use 'grobs' for the list of plots
+ggsave("HBB_cont.pdf",p)
+
+```
+
+
+```{r,fig.height=11,fig.width=11}
+
+w_matrix <- cbind(results$sims.list$w_0,results$sims.list$w,results$sims.list$wnew)  # Matrix of dimensions (24000, 6)
+
+# Number of strains
+K <- ncol(w_matrix)
+
+# Compute u for each strain
+u_matrix <- 1 / (1 + exp(-w_matrix))
+
+# Function to create a histogram for a given strain with credible intervals in the title
+create_histogram_with_ci <- function(u, strain_id) {
+  # Calculate the 95% credible intervals (2.5% and 97.5%)
+  ci_lower <- quantile(u, probs = 0.025)
+  ci_upper <- quantile(u, probs = 0.975)
+  
+  # Convert to data frame for ggplot
+  u_df <- data.frame(u = u)
+  
+  # Create strain-specific title with credible intervals
+  strain_title <- paste(strain_id, "(95% CI: [", signif(ci_lower, 3), ", ", signif(ci_upper, 3), "])")
+  
+  # Create histogram with vertical lines for 95% credible intervals
+  ggplot(u_df, aes(x = u)) +
+    geom_histogram(bins = 30, fill = "skyblue", color = "black") +
+    geom_vline(xintercept = ci_lower, color = "red", linetype = "dashed", size = 1) +
+    geom_vline(xintercept = ci_upper, color = "red", linetype = "dashed", size = 1) +
+    labs(title = strain_title,  # Individual title with credible intervals
+         x = "u",
+         y = "Frequency") +
+    theme_minimal()
+}
+
+# Create a list to hold the histograms
+histogram_list <- vector("list", K)
+
+# Generate histograms for each strain
+for (k in 1:K) {
+  u_k <- u_matrix[, k]
+  
+  # Create histograms with 95% credible intervals in the title
+  histogram_list[[k]] <- create_histogram_with_ci(u_k, serovars_new[k])
+}
+
+# Arrange and display all the histograms in a grid with a main title
+p <- do.call(grid.arrange, c(histogram_list, ncol = 2, top = paste("Histograms of u by Strains with 95% Credible Intervals")))  # Add main title with `top`
+ggsave("HBB_U_with_CI_in_Title.pdf", p)
+
+```
+
+
+
+## Plotting the resulting probability of infection.
+
+```{r,fig.height=6,fig.width=10}
+
+# Generate log10 dose levels from 0 to the maximum of the observed doses
+max_dose <- max(data$d)
+log10_dose <- seq(0, log10(max_dose), length.out = 100)
+dose_levels <- 10^log10_dose  # Transform back to dose levels
+
+# Define a function to calculate infection probability
+predict_prob <- function(alpha, beta, dose) {
+  prob_inf <- 1 - exp(lgamma(alpha + beta) + lgamma(beta + dose) - lgamma(beta) - lgamma(alpha + beta + dose))
+  return(prob_inf)
+}
+
+# Calculate the overall infection probability using w_0 and z_0
+overall_prob_median <- sapply(dose_levels, function(dose) {
+  median(predict_prob(a_0, b_0, dose))
+})
+overall_prob_lower <- sapply(dose_levels, function(dose) {
+  quantile(predict_prob(a_0, b_0, dose), 0.025)
+})
+overall_prob_upper <- sapply(dose_levels, function(dose) {
+  quantile(predict_prob(a_0, b_0, dose), 0.975)
+})
+
+
+
+K = length(serovars)
+# Calculate strain-specific predicted probabilities
+predicted_medians <- sapply(1:K, function(k) {
+  sapply(dose_levels, function(dose) {
+    median(predict_prob(a[, k], b[, k], dose))
+  })
+})
+
+predicted_lowers <- sapply(1:K, function(k) {
+  sapply(dose_levels, function(dose) {
+    quantile(predict_prob(a[, k], b[, k], dose), 0.025)
+  })
+})
+
+predicted_uppers <- sapply(1:K, function(k) {
+  sapply(dose_levels, function(dose) {
+    quantile(predict_prob(a[, k], b[, k], dose), 0.975)
+  })
+})
+
+# Create a data frame for plotting the predicted probabilities (strain_specific)
+plot_data <- data.frame(
+  log10_dose = rep(log10_dose, K),
+  dose = rep(dose_levels, K),
+  strain = factor(rep(serovars, each = length(log10_dose))),  # Map strain to serovar names
+  median_prob = as.vector(predicted_medians),
+  lower_95CI = as.vector(predicted_lowers),
+  upper_95CI = as.vector(predicted_uppers)
+)
+
+# Overall probability data
+overall_data <- data.frame(
+  log10_dose = log10_dose,
+  dose = dose_levels,
+  median_prob = overall_prob_median,
+  lower_95CI = overall_prob_lower,
+  upper_95CI = overall_prob_upper
+)
+
+# Assign observed probabilities to the correct groups (strains)
+# Create observed data for each strain
+plot_list <- list()
+for (g in 1:K) {
+  group_indices <- which(data$strain == g)  # Assuming 'data$strain' contains strain IDs
+  plot_list[[g]] <- data.frame(
+    log10_dose = log10(data$d[group_indices]),
+    dose = data$d[group_indices],
+    strain = as.factor(serovars[g]),  # Assign serovar names
+    observed_prob = data$y[group_indices] / data$n[group_indices]  # Observed infection probability
+  )
+}
+
+# Combine all observed data into a single data frame
+observed_data <- do.call(rbind, plot_list)
+observed_data$n = data$n[match(observed_data$dose, data$d)]
+
+# Function to find the dose closest to 0.5 infection probability for each strain
+find_dose_for_prob <- function(median_probs, doses, target_prob = 0.5) {
+  closest_idx <- which.min(abs(median_probs - target_prob))  # Find closest index to 0.5 probability
+  return(doses[closest_idx])
+}
+
+# Infection probability function
+predict_prob <- function(alpha, beta, dose) {
+  1 - exp(lgamma(alpha + beta) + lgamma(beta + dose) - lgamma(beta) - lgamma(alpha + beta + dose))
+}
+
+# Calculate the overall infection probability using w_0 and z_0
+overall_prob_median <- sapply(dose_levels, function(dose) {
+  median(predict_prob(a_0, b_0, dose))
+})
+overall_prob_lower <- sapply(dose_levels, function(dose) {
+  quantile(predict_prob(a_0, b_0, dose), 0.025)
+})
+overall_prob_upper <- sapply(dose_levels, function(dose) {
+  quantile(predict_prob(a_0, b_0, dose), 0.975)
+})
+
+#########################
+# Calculate the New_strain infection probability using w_0 and z_0
+new_prob_median <- sapply(dose_levels, function(dose) {
+  median(predict_prob(a_new, b_new, dose))
+})
+new_prob_lower <- sapply(dose_levels, function(dose) {
+  quantile(predict_prob(a_new, b_new, dose), 0.025)
+})
+new_prob_upper <- sapply(dose_levels, function(dose) {
+  quantile(predict_prob(a_new, b_new, dose), 0.975)
+})
+##########################################
+
+
+
+# Strain-specific probabilities
+predicted_medians <- sapply(1:K, function(k) sapply(dose_levels, function(dose) median(predict_prob(a[, k], b[, k], dose))))
+predicted_lowers <- sapply(1:K, function(k) sapply(dose_levels, function(dose) quantile(predict_prob(a[, k], b[, k], dose), 0.025)))
+predicted_uppers <- sapply(1:K, function(k) sapply(dose_levels, function(dose) quantile(predict_prob(a[, k], b[, k], dose), 0.975)))
+
+# Prepare data for strains
+plot_data <- data.frame(
+  log10_dose = rep(log10_dose, K),
+  dose = rep(dose_levels, K),
+  strain = factor(rep(serovars, each = length(log10_dose))),
+  median_prob = as.vector(predicted_medians),
+  lower_95CI = as.vector(predicted_lowers),
+  upper_95CI = as.vector(predicted_uppers)
+)
+
+# Add overall data to plot_data with a new strain label for "Overall"
+overall_data_expanded <- data.frame(
+  log10_dose = log10_dose,
+  dose = dose_levels,
+  strain = factor(rep("Overall_strain", length(log10_dose))),  # New strain label for overall plot
+  median_prob = overall_prob_median,
+  lower_95CI = overall_prob_lower,
+  upper_95CI = overall_prob_upper
+)
+plot_data <- rbind(plot_data, overall_data_expanded)
+
+# Observed data for each strain
+plot_list <- lapply(1:K, function(g) {
+  group_indices <- which(data$strain == g)
+  data.frame(
+    log10_dose = log10(data$d[group_indices]),
+    dose = data$d[group_indices],
+    strain = as.factor(serovars[g]),
+    observed_prob = data$y[group_indices] / data$n[group_indices]
+  )
+})
+observed_data <- do.call(rbind, plot_list)
+observed_data$n <- data$n[match(observed_data$dose, data$d)]
+
+# Add overall observed data for "Overall" strain
+overall_observed_data <- data.frame(
+  log10_dose = log10(data$d),
+  dose = data$d,
+  strain = factor(rep("Overall_strain", length(data$d))),
+  observed_prob = data$y / data$n,
+  n = data$n
+)
+observed_data <- rbind(observed_data, overall_observed_data)
+
+# Plot with facet for each strain and overall
+# Ensure 'n' values are correctly included in observed data
+observed_data$n <- data$n[match(observed_data$dose, data$d)]
+
+
+new_strain_data <- data.frame(
+  log10_dose = log10(data$d),
+  dose = data$d,
+  strain = factor(rep("New Strain", length(data$d))),  # Label for the new strain
+  observed_prob = NA,  # No observed data for the new strain
+  n = NA
+)
+
+# Create predicted data points for the new strain
+new_strain_data_expanded <- data.frame(
+  log10_dose = log10_dose,
+  dose = dose_levels,
+  strain = factor(rep("New Strain", length(log10_dose))),  # New strain label for overall plot
+  median_prob = new_prob_median,
+  lower_95CI = new_prob_lower,
+  upper_95CI = new_prob_upper
+)
+
+# Combine all plot data, including the new strain
+plot_data_all <- rbind(plot_data, overall_data_expanded, new_strain_data_expanded)
+
+# Combine observed data, ensuring the new strain (with NAs) is included
+observed_data_all <- rbind(observed_data, new_strain_data)
+
+# Calculate the ED50 for each strain
+ed50_doses <- sapply(1:K, function(k) {
+  find_dose_for_prob(predicted_medians[, k], dose_levels)
+})
+
+# Overall ED50 calculation
+overall_ed50_dose <- find_dose_for_prob(overall_prob_median, dose_levels)
+
+# New strain ED50 calculation (using the new_prob_median)
+new_strain_ed50_dose <- find_dose_for_prob(new_prob_median, dose_levels)
+
+# Combine all ED50 doses and strains
+Ed50_doses <- c(ed50_doses, overall_ed50_dose, new_strain_ed50_dose)
+all_strains <- c(serovars, "Overall_strain", "New Strain")
+
+# Create data for ED50 labels
+ed50_labels <- data.frame(
+  strain = factor(all_strains),
+  ed50 = log10(Ed50_doses),
+  label = signif(log10(Ed50_doses),4),  # Label with strain name and ED50
+  y_pos = -0.25  # Position just above the 0.5 probability line for better visibility
+)
+
+# Generate the plot
+ggplot() +
+  
+  # Plot credible intervals for each strain, including the new strain
+  geom_ribbon(data = plot_data_all, aes(x = log10_dose, ymin = lower_95CI, ymax = upper_95CI, fill = strain), alpha = 0.2) +
+  
+  # Plot predicted median probabilities for each strain, including the new strain
+  geom_line(data = plot_data_all, aes(x = log10_dose, y = median_prob, color = strain), lwd = 0.5) +
+  
+  # Plot observed data points for all strains (allowing NAs for the new strain)
+  geom_point(data = observed_data_all, aes(x = log10_dose, y = observed_prob, shape = "Observed Data"), size = 2, fill = "black", na.rm = TRUE) +
+  
+  # Add vertical and horizontal lines for ED50
+  geom_segment(data = ed50_labels, aes(x = ed50, xend = ed50, y = 0, yend = 0.5, color = strain), linetype = "dashed") +
+  geom_segment(data = ed50_labels, aes(x = 0, xend = ed50, y = 0.5, yend = 0.5, color = strain), linetype = "dashed") +
+  
+  # Add oblique text labels for ED50 values
+  geom_text(data = ed50_labels, aes(x = ed50, y = y_pos, label = label, color = strain), angle = 45, hjust = -0.1, vjust = 0.5, size = 3) +
+  
+  # Labels and theme
+  labs(x = "log10 Dose", y = "Probability of Infection", title = "Beta-Binomial Probability of Infection by Dose Level and Strain") +
+  theme_minimal() +
+  
+  # Add colors and fills for strain, including a color for "New Strain" and "Overall"
+  scale_color_manual(name = "Strain", values = c(rainbow(K), "purple", "blue")) +
+  scale_fill_manual(name = "Strain", values = c(rainbow(K), "purple", "blue")) +
+  scale_shape_manual(name = "Data Type", values = c("Observed Data" = 21)) +
+  
+  # Separate plots for each strain, including the new strain
+  facet_wrap(~ strain, scales = "free_y") +
+  theme(legend.position = "right")
+
+# Save the plot
+ggsave("HBB_Pinf_with_ED50_segments.pdf")
+
+```
+
+

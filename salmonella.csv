@@ -1,0 +1,20 @@
+﻿Nr,I,t,m,S,log10dose,N,Y
+1,1,S.cubana,Dye,Susceptible,4.57,17,12
+2,2,S.enteritidis,Beef,Normal,5.41,5,3
+3,2,S.enteritidis,Beef,Normal,2.97,3517,967
+4,3,S.enteritidis,Cake,Normal,2.65,5102,1371
+5,3,S.enteritidis,Cake,Normal,5.8,13,11
+6,4,S.enteritidis,Chicken,Normal,3.63,16,3
+6,4,S.enteritidis,Chicken,Susceptible,3.63,133,53
+7,5,S.enteritidis,Egg,Normal,6.3,114,63
+8,5,S.enteritidis,Egg,Normal,3.8,884,558
+9,5,S.enteritidis,Egg,Susceptible,1.4,156,42
+12,8,S.enteritidis,Sauce,Normal,4.74,39,39
+13,9,S.enteritidis,Soup,Normal,6.31,123,113
+14,10,S.heidelberg,Cheese,Normal,2.22,205,68
+17,13,S.oranienburg,Soup,Normal,9.9,11,11
+18,14,S.typhimurium,Ice cream,Normal,3.79,1400,770
+19,14,S.typhimurium,Ice cream,Normal,8.7,7,7
+19,14,S.typhimurium,Ice cream,Susceptible,8,1,1
+20,15,S.typhimurium,Water,Normal,2.31,7572,805
+20,15,S.typhimurium,Water,Susceptible,2.31,1216,230
