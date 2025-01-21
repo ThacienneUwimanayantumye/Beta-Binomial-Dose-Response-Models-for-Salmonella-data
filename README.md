@@ -17,7 +17,7 @@ The project employs Bayesian inference with OpenBUGS and R for parameter estimat
  To reproduce the analysis, ensure the following are installed:
 
  ### R Packages
- install.packages(c("R2OpenBUGS", "ggplot2", "MASS", "tidyr", "grid", "gridExtra", "coda", "Hmisc"))
+ `install.packages(c("R2OpenBUGS", "ggplot2", "MASS", "tidyr", "grid", "gridExtra", "coda", "Hmisc"))`
 
 ### OpenBUGS
 Download and install OpenBUGS from https://openbugs.software.informer.com/
