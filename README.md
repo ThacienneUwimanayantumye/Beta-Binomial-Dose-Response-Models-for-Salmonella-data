@@ -1,7 +1,7 @@
 # Beta-Binomial-Dose-Response-Models-for-Salmonella-data
 
 ## Overview
-This repository demonstrates the use of a hierarchical beta-binomial dose-response model to analyze Salmonella epidemiological data. The model investigates strain-specific variability and predicts infection probabilities for new strains.\\
+This repository demonstrates the use of a hierarchical beta-binomial dose-response model to analyze Salmonella epidemiological data. The model investigates strain-specific variability and predicts infection probabilities for new strains.
 
 The project employs Bayesian inference with OpenBUGS and R for parameter estimation, showcasing advanced data analysis and visualization techniques. It is designed for scientific reproducibility and can be used as a portfolio piece.
 
