@@ -21,20 +21,6 @@ The project employs Bayesian inference with OpenBUGS and R for parameter estimat
 
 ### OpenBUGS
 Download and install OpenBUGS from https://openbugs.software.informer.com/
-
-## File Structure
-├── README.md                  # Project overview and reproduction guide
-├── hierarchical_model.Rmd     # R Markdown file with full analysis
-├── hierarchical_dose_response_model_sigmapriors.txt # Model definition for OpenBUGS
-├── data/
-│   └── salmonella.csv          # Example dataset (if permissible)
-├── figures/                    # Generated plots and visualizations
-│   ├── HBB_trace.pdf
-│   ├── HBB_cont.pdf
-│   └── HBB_Pinf_with_ED50_segments.pdf
-└── scripts/                    # Supporting scripts
-    └── run_analysis.R          # Simplified script to execute the analysis
-
 ## How to Reproduce the Analysis
 ### Step 1: Clone the Repository
 git clone https://github.com/thacienneUwimanayantumye/Hierarchical-Beta-Binomial-Model.git
