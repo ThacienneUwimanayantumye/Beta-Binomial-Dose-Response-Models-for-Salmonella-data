@@ -7,10 +7,10 @@ The project employs Bayesian inference with OpenBUGS and R for parameter estimat
 
  ## Features
 
--**Hierarchical Model:** Incorporates hyperparameters for strain-specific dose-response variability.
--**Bayesian Inference:** Implements MCMC to estimate parameters using OpenBUGS.
--**Predictive Analysis:** Includes predictions for a new strain.
--**Visualization:** Generates detailed plots for MCMC convergence, contour analysis, histograms, and dose-response curves.
+- **Hierarchical Model:** Incorporates hyperparameters for strain-specific dose-response variability.
+* **Bayesian Inference:** Implements MCMC to estimate parameters using OpenBUGS.
++ **Predictive Analysis:** Includes predictions for a new strain.
+- **Visualization:** Generates detailed plots for MCMC convergence, contour analysis, histograms, and dose-response curves.
 
  ## Prerequisites
 
