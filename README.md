@@ -1,2 +1,23 @@
 # Beta-Binomial-Dose-Response-Models-for-Salmonella-data
-In this repository, we break down how to use Beta-Binomial Dose-Response models to estimate probability of infection caused by different strains of contagious pathogens. We use Salmonella epidemiological data.  
+
+## Overview
+This repository demonstrates the use of a hierarchical beta-binomial dose-response model to analyze Salmonella epidemiological data. The model investigates strain-specific variability and predicts infection probabilities for new strains.\\
+
+The project employs Bayesian inference with OpenBUGS and R for parameter estimation, showcasing advanced data analysis and visualization techniques. It is designed for scientific reproducibility and can be used as a portfolio piece.
+
+ ## Features
+ \begin{itemize}
+ \item \textbf{Hierarchical Model:} Incorporates hyperparameters for strain-specific dose-response variability.
+ \item \textbf{Bayesian Inference:} Implements MCMC to estimate parameters using OpenBUGS.
+ \item \textbf{Predictive Analysis:} Includes predictions for a new strain.
+ \item \textbf{Visualization:} Generates detailed plots for MCMC convergence, contour analysis, histograms, and dose-response curves.
+
+ ## Prerequisites
+
+ To reproduce the analysis, ensure the following are installed:
+
+ ### R Packages
+ install.packages(c("R2OpenBUGS", "ggplot2", "MASS", "tidyr", "grid", "gridExtra", "coda", "Hmisc"))
+
+### OpenBUGS
+Download and install OpenBUGS from https://openbugs.software.informer.com/
