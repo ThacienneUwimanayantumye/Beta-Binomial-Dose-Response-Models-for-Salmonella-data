@@ -21,3 +21,54 @@ The project employs Bayesian inference with OpenBUGS and R for parameter estimat
 
 ### OpenBUGS
 Download and install OpenBUGS from https://openbugs.software.informer.com/
+
+## File Structure
+├── README.md                  # Project overview and reproduction guide
+├── hierarchical_model.Rmd     # R Markdown file with full analysis
+├── hierarchical_dose_response_model_sigmapriors.txt # Model definition for OpenBUGS
+├── data/
+│   └── salmonella.csv          # Example dataset (if permissible)
+├── figures/                    # Generated plots and visualizations
+│   ├── HBB_trace.pdf
+│   ├── HBB_cont.pdf
+│   └── HBB_Pinf_with_ED50_segments.pdf
+└── scripts/                    # Supporting scripts
+    └── run_analysis.R          # Simplified script to execute the analysis
+
+## How to Reproduce the Analysis
+### Step 1: Clone the Repository
+git clone https://github.com/thacienneUwimanayantumye/Hierarchical-Beta-Binomial-Model.git
+cd Hierarchical-Beta-Binomial-Model
+
+### Step 2: Set Up the Environment
+Ensure all required R packages are installed and OpenBUGS is properly configured.
+
+### Step 3: Run the Analysis
+1. Open hierarchical_model.Rmd in RStudio.
+2. Knit the file to generate a complete report:
+   - Set the output to PDF, HTML, or Word as needed.
+
+### Results
+
+**MCMC Diagnostics**
+  The trace plots indicate convergence across all monitored parameters.
+  
+**Parameter Exploration**
+The contour plots to depict the posterior density of log10 of the estimated parameters
+
+**Dose-Response Curves**
+The dose-response relationship is visualized with credible intervals and observed data points
+
+## Dataset Description
+The analysis uses a subset of Salmonella epidemiological data with the following columns:
+
+- **log10dose**: Log-transformed dose levels.
+- **Y**: Number of cases.
+- **N**: Total number of individuals in the sample.
+- **t**: Strain type (categorical variable).
+
+## Future Work
+- Enhance strain-specific parameter tuning.
+- Compare hierarchical beta-binomial with other models (e.g., logistic regression).
+- Expand analysis to additional datasets.
+ .
